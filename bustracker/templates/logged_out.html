@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="card card--narrow">
+    <h1 class="page-heading">You’ve been logged out</h1>
+    <p>
+      Your Bus Tracker session has ended on this device.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn--primary btn--large" href="{{ url_for('login') }}">
+        Log back in
+      </a>
+      <a class="btn btn--secondary" href="{{ url_for('public_landing') }}">
+        Back to Home
+      </a>
+    </div>
+  </section>
+{% endblock %}

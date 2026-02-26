@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="card card--narrow">
+    <h1 class="page-heading">
+      {{ heading or 'Message' }}
+    </h1>
+
+    <p class="message-text">
+      {{ message }}
+    </p>
+
+    <div class="actions">
+      {% if primary_action_label and primary_action_url %}
+        <a class="btn btn--primary" href="{{ primary_action_url }}">
+          {{ primary_action_label }}
+        </a>
+      {% endif %}
+
+      {% if secondary_action_label and secondary_action_url %}
+        <a class="btn btn--secondary" href="{{ secondary_action_url }}">
+          {{ secondary_action_label }}
+        </a>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="card">
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-heading">Bus Run</h1>
+        <p class="muted">
+          {{ school_name }} · {{ run_date | mmddyyyy }} · {{ run_type_label }}
+        </p>
+      </div>
+
+      <div class="actions actions--compact">
+        <a class="btn btn--secondary" href="{{ url_for('home') }}">
+          Back to Home
+        </a>
+        <a
+          class="btn btn--secondary"
+          href="{{ url_for('edit_bus_run', bus_run_public_id=bus_run_public_id) }}"
+        >
+          Edit Run
+        </a>
+      </div>
+    </div>
+
+    <div class="meta-list">
+      <div><strong>Run ID:</strong> {{ bus_run_public_id }}</div>
+    </div>
+
+    {% if show_buses_rolling %}
+      <div class="actions">
+        <button class="btn btn--primary" type="button">
+          Buses Rolling
+        </button>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="tile-grid">
+    {% for tile in tiles %}
+      <article class="card tile-card">
+        <h2 class="tile-card__title">{{ tile.bus_label }}</h2>
+
+        <div class="tile-card__status">
+          {{ tile.status_label }}
+        </div>
+
+        <dl class="kv-list">
+          <div class="kv-row">
+            <dt>Check-in</dt>
+            <dd>{{ tile.check_in_time or '—' }}</dd>
+          </div>
+          <div class="kv-row">
+            <dt>Student Count</dt>
+            <dd>{{ tile.student_count or '—' }}</dd>
+          </div>
+          <div class="kv-row">
+            <dt>Departure</dt>
+            <dd>{{ tile.departure_time or '—' }}</dd>
+          </div>
+        </dl>
+
+        <div class="actions actions--stack">
+          <button class="btn btn--primary" type="button">
+            Check In
+          </button>
+          <button class="btn btn--secondary" type="button">
+            Record Count
+          </button>
+          <button class="btn btn--secondary" type="button">
+            Mark Departure
+          </button>
+        </div>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

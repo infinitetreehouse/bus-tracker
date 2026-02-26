@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="card">
+    <div class="page-header-row">
+      <div>
+        <h1 class="page-heading">Edit Bus Run</h1>
+        <p class="muted">
+          {{ school_name }} · {{ run_date | mmddyyyy }} · {{ run_type_label }}
+        </p>
+      </div>
+
+      <div class="actions actions--compact">
+        <a
+          class="btn btn--secondary"
+          href="{{ url_for('view_bus_run', bus_run_public_id=bus_run_public_id) }}"
+        >
+          Back to Run
+        </a>
+      </div>
+    </div>
+
+    <p class="muted">
+      Placeholder edit screen for adding/removing buses and future soft delete.
+    </p>
+
+    <form method="post" action="#">
+      <div class="section-block">
+        <h2 class="section-heading">Included Buses</h2>
+
+        <div class="checkbox-grid">
+          {% for bus in bus_options %}
+            <label class="checkbox-card">
+              <input
+                type="checkbox"
+                name="bus_codes"
+                value="{{ bus.code }}"
+                {% if bus.checked %}checked{% endif %}
+              >
+              <span>{{ bus.label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn--primary" type="submit">
+          Save Changes
+        </button>
+        <button class="btn btn--danger" type="button">
+          Soft Delete Run
+        </button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

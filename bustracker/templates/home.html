@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="card">
+    <h1 class="page-heading">Bus Tracker Home</h1>
+    <p class="muted">
+      Your school(s): <strong>{{ school_short_names_display }}</strong>
+    </p>
+    <p class="muted">
+      Select a school, date, run type, and the buses you want to track.
+    </p>
+
+    <form method="post" action="{{ url_for('create_or_open_bus_run') }}">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="school_id">School</label>
+          <select id="school_id" name="school_id" required>
+            {% for school in school_options %}
+              <option value="{{ school.id }}">
+                {{ school.short_name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="run_date">Date</label>
+          <input
+            id="run_date"
+            name="run_date"
+            type="date"
+            value="{{ default_date_iso }}"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="run_type_code">Run Type</label>
+          <select id="run_type_code" name="run_type_code" required>
+            {% for run_type in run_type_options %}
+              <option
+                value="{{ run_type.code }}"
+                {% if run_type.code == default_run_type_code %}selected{% endif %}
+              >
+                {{ run_type.label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <details class="bus-picker">
+        <summary class="bus-picker__summary">
+          <span class="bus-picker__title">Buses</span>
+          <span class="bus-picker__hint">All buses included · Tap to change</span>
+        </summary>
+
+        <div class="bus-picker__controls">
+          <button class="btn btn--secondary" type="button" id="bus_select_all">
+            Select all
+          </button>
+          <button class="btn btn--secondary" type="button" id="bus_clear_all">
+            Clear
+          </button>
+        </div>
+
+        <p class="muted">
+          Optional: choose a subset of buses for this run.
+        </p>
+
+        <div class="checkbox-grid" id="bus_checkbox_grid">
+          {% for bus in bus_options %}
+            <label class="checkbox-card">
+              <input
+                type="checkbox"
+                name="bus_codes"
+                value="{{ bus.code }}"
+                checked
+              >
+              <span>{{ bus.label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </details>
+
+      <div class="actions">
+        <button class="btn btn--primary btn--large" type="submit">
+          Track Buses
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2 class="section-heading">Quick Links (Placeholder)</h2>
+    <div class="actions">
+      <a class="btn btn--secondary" href="{{ url_for('view_bus_run', bus_run_public_id='demo-run-123') }}">
+        Open Example Bus Run
+      </a>
+      <a class="btn btn--secondary" href="{{ url_for('edit_bus_run', bus_run_public_id='demo-run-123') }}">
+        Open Example Edit Page
+      </a>
+      <a class="btn btn--secondary" href="#">
+        Open Dashboard (TBD)
+      </a>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='home.js') }}"></script>
+{% endblock %}
+

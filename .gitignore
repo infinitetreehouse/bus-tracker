@@ -1,0 +1,16 @@
+# python
+__pycache__/
+*.pyc
+
+# venv
+.venv/
+
+# env files
+.env
+
+# mac
+.DS_Store
+
+# seed data (keep folder structure, ignore actual csvs)
+scripts/seed/data/*
+!scripts/seed/data/.gitkeep

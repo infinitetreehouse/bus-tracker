@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="card card--hero">
+    <h1 class="page-heading">Bus Tracker</h1>
+    <p class="lead">
+      Track bus arrivals, dismissals, and student counts.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn--primary btn--large" href="{{ url_for('login') }}">
+        Sign in with Google
+      </a>
+    </div>
+  </section>
+{% endblock %}
