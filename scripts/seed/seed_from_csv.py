@@ -448,10 +448,20 @@ def upsert_school_buses(session, csv_path):
             msg = 'school_buses.csv: bus not found for bus_code: ' + bus_code
             raise ValueError(msg)
 
+        # Updated 2/27/2026 to allow the same bus to be used multiple times with
+        # different display_names in order to distinguish between AM/PM
+        
+        # existing = session.execute(
+        #     select(SchoolBus).where(
+        #         SchoolBus.school_id == school.id,
+        #         SchoolBus.bus_id == bus.id
+        #     )
+        # ).scalar_one_or_none()
+
         existing = session.execute(
             select(SchoolBus).where(
                 SchoolBus.school_id == school.id,
-                SchoolBus.bus_id == bus.id
+                SchoolBus.display_name == display_name
             )
         ).scalar_one_or_none()
 
@@ -473,8 +483,15 @@ def upsert_school_buses(session, csv_path):
 
         changed = False
 
-        if existing.display_name != display_name:
-            existing.display_name = display_name
+        # Updated 2/27/2026 to update bus_id since display_name is replacing it
+        # as part of the natural key
+        
+        # if existing.display_name != display_name:
+        #     existing.display_name = display_name
+        #     changed = True
+
+        if existing.bus_id != bus.id:
+            existing.bus_id = bus.id
             changed = True
 
         if existing.color_name != color_name:

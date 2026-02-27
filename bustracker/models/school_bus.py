@@ -18,11 +18,14 @@ class SchoolBus(Base):
     __tablename__ = 'school_buses'
 
     __table_args__ = (
-        UniqueConstraint(
-            'school_id',
-            'bus_id',
-            name='uq_school_buses_school_bus',
-        ),
+        # Removed 2/27/2026 to allow the same bus to be used multiple times with
+        # different display_names in order to distinguish between AM/PM
+        
+        # UniqueConstraint(
+        #     'school_id',
+        #     'bus_id',
+        #     name='uq_school_buses_school_bus',
+        # ),
         UniqueConstraint(
             'school_id',
             'display_name',
