@@ -1,7 +1,10 @@
+import uuid
+
 from sqlalchemy import BigInteger
 from sqlalchemy import Column
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
+from sqlalchemy import String
 from sqlalchemy import UniqueConstraint
 from sqlalchemy import text
 
@@ -24,6 +27,13 @@ class UserSchool(Base):
         primary_key=True,
         autoincrement=True,
         nullable=False
+    )
+
+    public_id = Column(
+        String(36),
+        nullable=False,
+        unique=True,
+        default=lambda: str(uuid.uuid4()),
     )
 
     user_id = Column(
