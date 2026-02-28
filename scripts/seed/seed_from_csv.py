@@ -13,50 +13,12 @@ from sqlalchemy.orm import sessionmaker
 import bustracker.models
 from bustracker.config import DevConfig, ProdConfig
 from bustracker.models.bus import Bus
+from bustracker.models.run_type import RunType
 from bustracker.models.school import School
 from bustracker.models.school_bus import SchoolBus
+from bustracker.models.school_bus_run_type import SchoolBusRunType
 from bustracker.models.user import User
 from bustracker.models.user_school import UserSchool
-
-
-"""
-Tests:
--DONE Smoke test initial load, should work.
-
--DONE User emails have different cases + leading/trailing spaces (same spelling)
-in users.csv & user_schools.csv, should still match, saved stripped and lower
-
--DONE School short_names have different cases in schools.csv & user_schools.csv,
-should fail... DOES NOT FAIL, BUT OK
-
--DONE Any value other than 1 or 0 for is_active fails
-
--DONE Blank/empty white space for required fields fails
-
--DONE Missing required header fails
-
--DONE Duplicate emails in users.csv just runs back-to-back updates
-
--DONE Loading user_schools.csv before the user or school is added fails
-
--DONE If any row fails, the entire update is rolled back... SEEMS TO WORK
-
--DONE Updates (e.g., changing is_active from 1 to 0) are successful
-
------
-
-python -m scripts.seed.seed_from_csv
-
-SQL commands to help with testing:
-
-SET FOREIGN_KEY_CHECKS = 0;
-TRUNCATE TABLE user_schools;
-TRUNCATE TABLE users;
-TRUNCATE TABLE school_buses;
-TRUNCATE TABLE buses;
-TRUNCATE TABLE schools;
-SET FOREIGN_KEY_CHECKS = 1;
-"""
 
 
 def _get_cfg():
@@ -73,19 +35,29 @@ def _parse_only_arg(argv):
     # --only schools,users
     allowed = {
         'schools',
-        'users',
-        'user_schools',
         'buses',
         'school_buses',
+        'run_types',
+        'school_bus_run_types',
+        'users',
+        'user_schools',
     }
 
     if '--only' not in argv:
-        return ['schools', 'buses', 'school_buses', 'users', 'user_schools']
+        return [
+            'schools',
+            'buses',
+            'school_buses',
+            'run_types',
+            'school_bus_run_types',
+            'users',
+            'user_schools',
+        ]
 
     i = argv.index('--only')
     if i == len(argv) - 1:
-        msg = '--only requires a value (schools, buses, school_buses, users, '
-        msg += 'user_schools)'
+        msg = '--only requires a value (schools, buses, school_buses, '
+        msg += 'run_types, school_bus_run_types, users, user_schools)'
         raise ValueError(msg)
 
     raw = argv[i + 1]
@@ -113,13 +85,12 @@ def _read_csv_rows(csv_path, required_headers):
         if missing:
             msg = 'missing required headers in %s: %s' % (
                 csv_path,
-                ', '.join(missing)
+                ', '.join(missing),
             )
             raise ValueError(msg)
 
         rows = []
         for row in reader:
-            # Keep raw row structure, but strip whitespace on string values
             cleaned = {}
             for k, v in row.items():
                 if v is None:
@@ -173,10 +144,40 @@ def _validate_hex_color(val, context):
         raise ValueError(msg)
 
 
+def _parse_time_hhmmss_optional(raw, context, field_name):
+    if raw is None:
+        return None
+
+    val = str(raw).strip()
+    if val == '':
+        return None
+
+    # Expect HH:MM:SS
+    parts = val.split(':')
+    if len(parts) != 3:
+        msg = context + ': invalid ' + field_name + ' (HH:MM:SS), got: ' + val
+        raise ValueError(msg)
+
+    try:
+        hh = int(parts[0])
+        mm = int(parts[1])
+        ss = int(parts[2])
+    except Exception:
+        msg = context + ': invalid ' + field_name + ' (HH:MM:SS), got: ' + val
+        raise ValueError(msg)
+
+    if hh < 0 or hh > 23 or mm < 0 or mm > 59 or ss < 0 or ss > 59:
+        msg = context + ': invalid ' + field_name + ' (HH:MM:SS), got: ' + val
+        raise ValueError(msg)
+
+    # Return a normalized string MySQL TIME will accept
+    return '%02d:%02d:%02d' % (hh, mm, ss)
+
+
 def upsert_schools(session, csv_path):
     rows = _read_csv_rows(
         csv_path,
-        required_headers=['short_name', 'long_name', 'timezone', 'is_active']
+        required_headers=['short_name', 'long_name', 'timezone', 'is_active'],
     )
 
     inserted = 0
@@ -189,7 +190,7 @@ def upsert_schools(session, csv_path):
         is_active = _parse_bool_0_1(r.get('is_active'), 'schools.csv')
 
         existing = session.execute(
-            select(School).where(School.short_name == short_name)
+            select(School).where(School.short_name == short_name),
         ).scalar_one_or_none()
 
         if existing is None:
@@ -197,13 +198,12 @@ def upsert_schools(session, csv_path):
                 short_name=short_name,
                 long_name=long_name,
                 timezone=timezone,
-                is_active=is_active
+                is_active=is_active,
             )
             session.add(s)
             inserted += 1
             continue
 
-        # Update only fields we control via CSV
         changed = False
 
         if existing.long_name != long_name:
@@ -237,13 +237,13 @@ def upsert_users(session, csv_path):
         email = email.lower()
 
         existing = session.execute(
-            select(User).where(User.email == email)
+            select(User).where(User.email == email),
         ).scalar_one_or_none()
 
         if existing is None:
             u = User(
                 email=email,
-                is_active=is_active
+                is_active=is_active,
             )
             session.add(u)
             inserted += 1
@@ -264,7 +264,7 @@ def upsert_users(session, csv_path):
 def upsert_user_schools(session, csv_path):
     rows = _read_csv_rows(
         csv_path,
-        required_headers=['user_email', 'school_short_name']
+        required_headers=['user_email', 'school_short_name'],
     )
 
     inserted = 0
@@ -273,18 +273,18 @@ def upsert_user_schools(session, csv_path):
         user_email = _require_str(
             r.get('user_email'),
             'user_schools.csv',
-            'user_email'
+            'user_email',
         )
         school_short_name = _require_str(
             r.get('school_short_name'),
             'user_schools.csv',
-            'school_short_name'
+            'school_short_name',
         )
 
         user_email = user_email.lower()
 
         user = session.execute(
-            select(User).where(User.email == user_email)
+            select(User).where(User.email == user_email),
         ).scalar_one_or_none()
 
         if user is None:
@@ -292,7 +292,7 @@ def upsert_user_schools(session, csv_path):
             raise ValueError(msg)
 
         school = session.execute(
-            select(School).where(School.short_name == school_short_name)
+            select(School).where(School.short_name == school_short_name),
         ).scalar_one_or_none()
 
         if school is None:
@@ -305,14 +305,14 @@ def upsert_user_schools(session, csv_path):
         existing = session.execute(
             select(UserSchool).where(
                 UserSchool.user_id == user.id,
-                UserSchool.school_id == school.id
-            )
+                UserSchool.school_id == school.id,
+            ),
         ).scalar_one_or_none()
 
         if existing is None:
             link = UserSchool(
                 user_id=user.id,
-                school_id=school.id
+                school_id=school.id,
             )
             session.add(link)
             inserted += 1
@@ -323,7 +323,7 @@ def upsert_user_schools(session, csv_path):
 def upsert_buses(session, csv_path):
     rows = _read_csv_rows(
         csv_path,
-        required_headers=['bus_code', 'is_active']
+        required_headers=['bus_code', 'is_active'],
     )
 
     inserted = 0
@@ -334,13 +334,13 @@ def upsert_buses(session, csv_path):
         is_active = _parse_bool_0_1(r.get('is_active'), 'buses.csv')
 
         existing = session.execute(
-            select(Bus).where(Bus.bus_code == bus_code)
+            select(Bus).where(Bus.bus_code == bus_code),
         ).scalar_one_or_none()
 
         if existing is None:
             b = Bus(
                 bus_code=bus_code,
-                is_active=is_active
+                is_active=is_active,
             )
             session.add(b)
             inserted += 1
@@ -371,7 +371,7 @@ def upsert_school_buses(session, csv_path):
             'driver_name',
             'is_sped',
             'is_active',
-        ]
+        ],
     )
 
     inserted = 0
@@ -381,56 +381,56 @@ def upsert_school_buses(session, csv_path):
         school_short_name = _require_str(
             r.get('school_short_name'),
             'school_buses.csv',
-            'school_short_name'
+            'school_short_name',
         )
         bus_code = _require_str(
             r.get('bus_code'),
             'school_buses.csv',
-            'bus_code'
+            'bus_code',
         )
 
         display_name = _require_str(
             r.get('display_name'),
             'school_buses.csv',
-            'display_name'
+            'display_name',
         )
         color_name = _require_str(
             r.get('color_name'),
             'school_buses.csv',
-            'color_name'
+            'color_name',
         )
         hex_color = _require_str(
             r.get('hex_color'),
             'school_buses.csv',
-            'hex_color'
+            'hex_color',
         )
         _validate_hex_color(hex_color, 'school_buses.csv')
 
         sort_order = _parse_int_required(
             r.get('sort_order'),
             'school_buses.csv',
-            'sort_order'
+            'sort_order',
         )
 
         driver_name = _require_str(
             r.get('driver_name'),
             'school_buses.csv',
-            'driver_name'
+            'driver_name',
         )
 
         is_sped = _parse_bool_0_1(
             r.get('is_sped'),
             'school_buses.csv',
-            field_name='is_sped'
+            field_name='is_sped',
         )
 
         is_active = _parse_bool_0_1(
             r.get('is_active'),
-            'school_buses.csv'
+            'school_buses.csv',
         )
 
         school = session.execute(
-            select(School).where(School.short_name == school_short_name)
+            select(School).where(School.short_name == school_short_name),
         ).scalar_one_or_none()
 
         if school is None:
@@ -441,28 +441,18 @@ def upsert_school_buses(session, csv_path):
             raise ValueError(msg)
 
         bus = session.execute(
-            select(Bus).where(Bus.bus_code == bus_code)
+            select(Bus).where(Bus.bus_code == bus_code),
         ).scalar_one_or_none()
 
         if bus is None:
             msg = 'school_buses.csv: bus not found for bus_code: ' + bus_code
             raise ValueError(msg)
 
-        # Updated 2/27/2026 to allow the same bus to be used multiple times with
-        # different display_names in order to distinguish between AM/PM
-        
-        # existing = session.execute(
-        #     select(SchoolBus).where(
-        #         SchoolBus.school_id == school.id,
-        #         SchoolBus.bus_id == bus.id
-        #     )
-        # ).scalar_one_or_none()
-
         existing = session.execute(
             select(SchoolBus).where(
                 SchoolBus.school_id == school.id,
-                SchoolBus.display_name == display_name
-            )
+                SchoolBus.display_name == display_name,
+            ),
         ).scalar_one_or_none()
 
         if existing is None:
@@ -475,20 +465,13 @@ def upsert_school_buses(session, csv_path):
                 sort_order=sort_order,
                 driver_name=driver_name,
                 is_sped=is_sped,
-                is_active=is_active
+                is_active=is_active,
             )
             session.add(sb)
             inserted += 1
             continue
 
         changed = False
-
-        # Updated 2/27/2026 to update bus_id since display_name is replacing it
-        # as part of the natural key
-        
-        # if existing.display_name != display_name:
-        #     existing.display_name = display_name
-        #     changed = True
 
         if existing.bus_id != bus.id:
             existing.bus_id = bus.id
@@ -524,10 +507,177 @@ def upsert_school_buses(session, csv_path):
     return {'inserted': inserted, 'updated': updated, 'rows': len(rows)}
 
 
+def upsert_run_types(session, csv_path):
+    rows = _read_csv_rows(
+        csv_path,
+        required_headers=[
+            'run_type_code',
+            'display_name',
+            'is_departure',
+            'default_after_local_time',
+            'is_active',
+        ],
+    )
+
+    inserted = 0
+    updated = 0
+
+    for r in rows:
+        run_type_code = _require_str(
+            r.get('run_type_code'),
+            'run_types.csv',
+            'run_type_code',
+        )
+        display_name = _require_str(
+            r.get('display_name'),
+            'run_types.csv',
+            'display_name',
+        )
+        is_departure = _parse_bool_0_1(
+            r.get('is_departure'),
+            'run_types.csv',
+            field_name='is_departure',
+        )
+
+        default_after_local_time = _parse_time_hhmmss_optional(
+            r.get('default_after_local_time'),
+            'run_types.csv',
+            'default_after_local_time',
+        )
+
+        is_active = _parse_bool_0_1(
+            r.get('is_active'),
+            'run_types.csv',
+        )
+
+        existing = session.execute(
+            select(RunType).where(RunType.run_type_code == run_type_code),
+        ).scalar_one_or_none()
+
+        if existing is None:
+            rt = RunType(
+                run_type_code=run_type_code,
+                display_name=display_name,
+                is_departure=is_departure,
+                default_after_local_time=default_after_local_time,
+                is_active=is_active,
+            )
+            session.add(rt)
+            inserted += 1
+            continue
+
+        changed = False
+
+        if existing.display_name != display_name:
+            existing.display_name = display_name
+            changed = True
+
+        if existing.is_departure != is_departure:
+            existing.is_departure = is_departure
+            changed = True
+
+        if existing.default_after_local_time != default_after_local_time:
+            existing.default_after_local_time = default_after_local_time
+            changed = True
+
+        if existing.is_active != is_active:
+            existing.is_active = is_active
+            changed = True
+
+        if changed:
+            updated += 1
+
+    return {'inserted': inserted, 'updated': updated, 'rows': len(rows)}
+
+
+def upsert_school_bus_run_types(session, csv_path):
+    rows = _read_csv_rows(
+        csv_path,
+        required_headers=[
+            'school_short_name',
+            'school_bus_display_name',
+            'run_type_code',
+        ],
+    )
+
+    inserted = 0
+
+    for r in rows:
+        school_short_name = _require_str(
+            r.get('school_short_name'),
+            'school_bus_run_types.csv',
+            'school_short_name',
+        )
+        school_bus_display_name = _require_str(
+            r.get('school_bus_display_name'),
+            'school_bus_run_types.csv',
+            'school_bus_display_name',
+        )
+        run_type_code = _require_str(
+            r.get('run_type_code'),
+            'school_bus_run_types.csv',
+            'run_type_code',
+        )
+
+        school = session.execute(
+            select(School).where(School.short_name == school_short_name),
+        ).scalar_one_or_none()
+
+        if school is None:
+            msg = (
+                'school_bus_run_types.csv: school not found for short_name: '
+                + school_short_name
+            )
+            raise ValueError(msg)
+
+        school_bus = session.execute(
+            select(SchoolBus).where(
+                SchoolBus.school_id == school.id,
+                SchoolBus.display_name == school_bus_display_name,
+            ),
+        ).scalar_one_or_none()
+
+        if school_bus is None:
+            msg = (
+                'school_bus_run_types.csv: school_bus not found for school='
+                + school_short_name
+                + ', display_name='
+                + school_bus_display_name
+            )
+            raise ValueError(msg)
+
+        run_type = session.execute(
+            select(RunType).where(RunType.run_type_code == run_type_code),
+        ).scalar_one_or_none()
+
+        if run_type is None:
+            msg = (
+                'school_bus_run_types.csv: run_type not found for run_type_code: '
+                + run_type_code
+            )
+            raise ValueError(msg)
+
+        existing = session.execute(
+            select(SchoolBusRunType).where(
+                SchoolBusRunType.school_bus_id == school_bus.id,
+                SchoolBusRunType.run_type_id == run_type.id,
+            ),
+        ).scalar_one_or_none()
+
+        if existing is None:
+            link = SchoolBusRunType(
+                school_bus_id=school_bus.id,
+                run_type_id=run_type.id,
+            )
+            session.add(link)
+            inserted += 1
+
+    return {'inserted': inserted, 'rows': len(rows)}
+
+
 def main():
     only = _parse_only_arg(sys.argv)
 
-    # Run from repo root: python scripts/seed/seed_from_csv.py
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
     seed_data_dir = os.path.join(repo_root, 'scripts', 'seed', 'data')
 
@@ -536,6 +686,8 @@ def main():
     user_schools_csv = os.path.join(seed_data_dir, 'user_schools.csv')
     buses_csv = os.path.join(seed_data_dir, 'buses.csv')
     school_buses_csv = os.path.join(seed_data_dir, 'school_buses.csv')
+    run_types_csv = os.path.join(seed_data_dir, 'run_types.csv')
+    school_bus_run_types_csv = os.path.join(seed_data_dir, 'school_bus_run_types.csv')
 
     cfg = _get_cfg()
 
@@ -548,6 +700,8 @@ def main():
         schools_result = None
         buses_result = None
         school_buses_result = None
+        run_types_result = None
+        school_bus_run_types_result = None
         users_result = None
         user_schools_result = None
 
@@ -560,7 +714,19 @@ def main():
         if 'school_buses' in only:
             school_buses_result = upsert_school_buses(
                 session,
-                school_buses_csv
+                school_buses_csv,
+            )
+
+        if 'run_types' in only:
+            run_types_result = upsert_run_types(
+                session,
+                run_types_csv,
+            )
+
+        if 'school_bus_run_types' in only:
+            school_bus_run_types_result = upsert_school_bus_run_types(
+                session,
+                school_bus_run_types_csv,
             )
 
         if 'users' in only:
@@ -584,34 +750,47 @@ def main():
         print('Schools: inserted=%s updated=%s rows=%s' % (
             schools_result['inserted'],
             schools_result['updated'],
-            schools_result['rows']
+            schools_result['rows'],
         ))
 
     if buses_result is not None:
         print('Buses: inserted=%s updated=%s rows=%s' % (
             buses_result['inserted'],
             buses_result['updated'],
-            buses_result['rows']
+            buses_result['rows'],
         ))
 
     if school_buses_result is not None:
         print('SchoolBuses: inserted=%s updated=%s rows=%s' % (
             school_buses_result['inserted'],
             school_buses_result['updated'],
-            school_buses_result['rows']
+            school_buses_result['rows'],
+        ))
+
+    if run_types_result is not None:
+        print('RunTypes: inserted=%s updated=%s rows=%s' % (
+            run_types_result['inserted'],
+            run_types_result['updated'],
+            run_types_result['rows'],
+        ))
+
+    if school_bus_run_types_result is not None:
+        print('SchoolBusRunTypes: inserted=%s rows=%s' % (
+            school_bus_run_types_result['inserted'],
+            school_bus_run_types_result['rows'],
         ))
 
     if users_result is not None:
         print('Users: inserted=%s updated=%s rows=%s' % (
             users_result['inserted'],
             users_result['updated'],
-            users_result['rows']
+            users_result['rows'],
         ))
 
     if user_schools_result is not None:
         print('UserSchools: inserted=%s rows=%s' % (
             user_schools_result['inserted'],
-            user_schools_result['rows']
+            user_schools_result['rows'],
         ))
 
 
