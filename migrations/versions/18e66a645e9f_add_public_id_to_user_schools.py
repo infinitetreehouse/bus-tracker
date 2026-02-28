@@ -56,14 +56,18 @@ def upgrade() -> None:
         nullable=False,
     )
 
-    # 4) Add unique constraint (unnamed is fine)
+    # 4) Add unique constraint
     op.create_unique_constraint(
-        None,
+        'public_id',
         'user_schools',
         ['public_id'],
     )
 
 
 def downgrade() -> None:
-    op.drop_constraint(None, 'user_schools', type_='unique')
+    op.drop_constraint(
+        'public_id',
+        'user_schools',
+        type_='unique',
+    )
     op.drop_column('user_schools', 'public_id')

@@ -5,6 +5,7 @@ from sqlalchemy import Boolean
 from sqlalchemy import Column
 from sqlalchemy import DateTime
 from sqlalchemy import String
+from sqlalchemy import Time
 from sqlalchemy import text
 
 from bustracker.models.base import Base
@@ -38,6 +39,12 @@ class RunType(Base):
     display_name = Column(
         String(64),
         nullable=False,
+        unique=True,
+    )
+
+    default_after_local_time = Column(
+        Time,
+        nullable=True,
         unique=True,
     )
 
