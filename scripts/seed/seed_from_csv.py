@@ -24,7 +24,7 @@ from bustracker.models.user_school import UserSchool
 
 """
 TODO:
--Update more upsert functions to run queries once and caches results for better
+-Update more upsert functions to run queries once and cache results for better
 performance, similar to upsert_school_bus_run_types().
 
 Tests:
