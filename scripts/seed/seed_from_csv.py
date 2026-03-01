@@ -2,6 +2,7 @@
 import csv
 import os
 import sys
+from datetime import time
 
 # 2) third-party
 from dotenv import load_dotenv
@@ -23,9 +24,8 @@ from bustracker.models.user_school import UserSchool
 
 """
 TODO:
--This script is starting to take a few minutes to complete, probably because of
-running multiple queries for every row in every file, looks for ways to make it
-more efficient at some point
+-Update more upsert functions to run queries once and caches results for better
+performance, similar to upsert_school_bus_run_types().
 
 Tests:
 
@@ -202,8 +202,11 @@ def _parse_time_hhmmss_optional(raw, context, field_name):
         msg = context + ': invalid ' + field_name + ' (HH:MM:SS), got: ' + val
         raise ValueError(msg)
 
-    # Return a normalized string MySQL TIME will accept
-    return '%02d:%02d:%02d' % (hh, mm, ss)
+    # Updated 3/1/2026 to return an actual time object for comparison against
+    # data from the database
+    # return '%02d:%02d:%02d' % (hh, mm, ss)
+    
+    return time(hh, mm, ss)
 
 
 def upsert_schools(session, csv_path):
@@ -623,6 +626,99 @@ def upsert_run_types(session, csv_path):
 
 
 def upsert_school_bus_run_types(session, csv_path):
+    rows = _read_csv_rows(
+        csv_path,
+        required_headers=[
+            'school_short_name',
+            'school_bus_display_name',
+            'run_type_code',
+        ],
+    )
+
+    # Cache: schools
+    schools = session.execute(select(School)).scalars().all()
+    school_by_short = {s.short_name: s for s in schools}
+
+    # Cache: run types
+    run_types = session.execute(select(RunType)).scalars().all()
+    run_type_by_code = {rt.run_type_code: rt for rt in run_types}
+
+    # Cache: school buses (keyed by (school_id, display_name))
+    school_buses = session.execute(select(SchoolBus)).scalars().all()
+    school_bus_by_school_and_name = {
+        (sb.school_id, sb.display_name): sb for sb in school_buses
+    }
+
+    # Cache: existing links
+    existing_links = session.execute(select(SchoolBusRunType)).scalars().all()
+    existing_pairs = {(l.school_bus_id, l.run_type_id) for l in existing_links}
+
+    inserted = 0
+
+    for r in rows:
+        school_short_name = _require_str(
+            r.get('school_short_name'),
+            'school_bus_run_types.csv',
+            'school_short_name',
+        )
+        school_bus_display_name = _require_str(
+            r.get('school_bus_display_name'),
+            'school_bus_run_types.csv',
+            'school_bus_display_name',
+        )
+        run_type_code = _require_str(
+            r.get('run_type_code'),
+            'school_bus_run_types.csv',
+            'run_type_code',
+        )
+
+        school = school_by_short.get(school_short_name)
+        if school is None:
+            msg = (
+                'school_bus_run_types.csv: school not found for short_name: '
+                + school_short_name
+            )
+            raise ValueError(msg)
+
+        school_bus = school_bus_by_school_and_name.get(
+            (school.id, school_bus_display_name)
+        )
+        if school_bus is None:
+            msg = (
+                'school_bus_run_types.csv: school_bus not found for school='
+                + school_short_name
+                + ', display_name='
+                + school_bus_display_name
+            )
+            raise ValueError(msg)
+
+        run_type = run_type_by_code.get(run_type_code)
+        if run_type is None:
+            msg = (
+                'school_bus_run_types.csv: run_type not found for run_type_code: '
+                + run_type_code
+            )
+            raise ValueError(msg)
+
+        pair = (school_bus.id, run_type.id)
+        if pair in existing_pairs:
+            continue
+
+        link = SchoolBusRunType(
+            school_bus_id=school_bus.id,
+            run_type_id=run_type.id,
+        )
+        session.add(link)
+        existing_pairs.add(pair)
+        inserted += 1
+
+    return {'inserted': inserted, 'rows': len(rows)}
+
+
+# Updated 3/1/2026, renamed_OLD to keep as a reference, but replaced with a new
+# version that runs queries once and caches results for better performance, this
+# versions was taking several minutes to complete for 320 rows
+def upsert_school_bus_run_types_OLD(session, csv_path):
     rows = _read_csv_rows(
         csv_path,
         required_headers=[
