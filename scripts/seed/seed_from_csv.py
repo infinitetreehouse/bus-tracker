@@ -21,6 +21,38 @@ from bustracker.models.user import User
 from bustracker.models.user_school import UserSchool
 
 
+"""
+TODO:
+-This script is starting to take a few minutes to complete, probably because of
+running multiple queries for every row in every file, looks for ways to make it
+more efficient at some point
+
+Tests:
+
+-DONE school_bus_run_types.csv has a bad values for all 3 lookup columns:
+    DONE school_short_name
+    DONE school_bus_display_name
+    DONE run_type_code
+
+-----
+
+python -m scripts.seed.seed_from_csv
+
+python -m scripts.seed.seed_from_csv --only run_types,school_bus_run_types
+
+SQL commands to help with testing:
+
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE user_schools;
+TRUNCATE TABLE users;
+TRUNCATE TABLE school_bus_run_types;
+TRUNCATE TABLE run_types;
+TRUNCATE TABLE school_buses;
+TRUNCATE TABLE buses;
+TRUNCATE TABLE schools;
+SET FOREIGN_KEY_CHECKS = 1;
+"""
+
 def _get_cfg():
     load_dotenv()
 
